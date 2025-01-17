@@ -1,0 +1,277 @@
+import random
+from collections import deque
+
+class Process:
+    # Single process
+    def __init__(self, pid, arrival_time, burst_time, priority=0):
+        self.pid = pid # proccess id
+        self.arrival_time = arrival_time
+        self.burst_time = burst_time  # run time
+        self.remaining_time = burst_time
+        self.priority = priority  # for priority based
+        self.start_time = None
+        self.completion_time = None
+        self.response_time = None
+        self.turnaround_time = None
+
+    def __repr__(self):
+        return f"P{self.pid}(arr={self.arrival_time}, burst={self.burst_time})"
+
+
+class WeightedFairScheduler:
+    """
+    weighted fair scheduling in multiple queues.
+
+    - weights: integers for specifying how many 'time slices' each queue gets
+               in one full cycle, ex-> [2, 1, 1].
+    - queue_count: Number of queues.
+    """
+    def __init__(self, weights):
+        self.weights = weights
+        self.queue_count = len(weights)
+        self.cycle_pattern = []
+        for i, w in enumerate(weights):
+            self.cycle_pattern.extend([i] * w)
+        # Ex: if weights = [2,1,1], cycle_pattern = [0,0,1,2]
+
+        self.current_index = 0  # Tracks position in cycle_pattern
+
+    def get_next_queue_index(self):
+
+        #Returns the index of the next queue to be scheduled.
+
+        idx = self.cycle_pattern[self.current_index]
+        self.current_index = (self.current_index + 1) % len(self.cycle_pattern)
+        return idx
+
+
+class FCFSQueue:
+    
+    #First come, first served scheduling. (non preemptive)
+    
+    def __init__(self):
+        self.queue = deque()
+
+    def add_process(self, process):
+        self.queue.append(process)
+
+    def get_next_process(self):
+        if self.queue:
+            return self.queue[0]  # Peek the first process
+        return None
+
+    def remove_process(self, process):
+        if self.queue and self.queue[0] == process:
+            self.queue.popleft()
+
+
+class SJFQueue:
+    
+    #Shortest job first scheduling. (nonpreemp)
+    
+    def __init__(self):
+        self.processes = []
+
+    def add_process(self, process):
+        self.processes.append(process)
+        # Always sorting by the shortest remaining time
+        self.processes.sort(key=lambda p: p.remaining_time)
+
+    def get_next_process(self):
+        if self.processes:
+            return self.processes[0]  # process with shortest burst
+        return None
+
+    def remove_process(self, process):
+        if process in self.processes:
+            self.processes.remove(process)
+
+
+class RRQueue:
+    
+    #Round Robin scheduling (fixed time quantum).
+    
+    def __init__(self, time_quantum=2):
+        self.queue = deque()
+        self.time_quantum = time_quantum
+
+    def add_process(self, process):
+        self.queue.append(process)
+
+    def get_next_process(self):
+        if self.queue:
+            return self.queue[0]
+        return None
+
+    def rotate_queue(self):
+        
+        #Move front process to back (time quantum tam kullanilmadiysa).
+        
+        if self.queue:
+            proc = self.queue.popleft()
+            self.queue.append(proc)
+
+    def remove_process(self, process):
+        if self.queue and self.queue[0] == process:
+            self.queue.popleft()
+
+
+def simulate(process_list, weights, time_quantum=2):
+    """
+    Main simulation function.
+
+    :param process_list: List of Process objects
+    :param weights: List of integers for WeightedFairScheduler
+    :param time_quantum: Time quantum for the RR queue
+    :return: None (prints results at the end)
+    
+
+     you can pick which scheduling algorithm belongs to Q1, Q2, Q3)
+     Example: Q1 = FCFS, Q2 = SJF, Q3 = RoundRobin
+    """
+    fcfs_queue = FCFSQueue()
+    sjf_queue = SJFQueue()
+    rr_queue = RRQueue(time_quantum=time_quantum)
+    queues = [fcfs_queue, sjf_queue, rr_queue]
+
+    # Weighted fair scheduler to pick which queue to schedule
+    wfs = WeightedFairScheduler(weights=weights)
+
+    # Sort processes by arrival time just for convenience
+    process_list.sort(key=lambda p: p.arrival_time)
+
+    # discrete time simulation
+    time = 0
+    completed_processes = 0
+    n = len(process_list)
+
+    # CPU utilization tracking
+    cpu_busy_time = 0
+
+    # Keep track of processes that have arrived but not yet placed in any queue
+    not_arrived = list(process_list)  # they are sorted by arrival_time
+
+    # While not all processes are completed
+    """
+     This brings any newly arrived processes into the system (You can decide 
+        which queue to enter). For demonstration, I distributed them by priority
+        or random. ex for priority-based assignment:
+        if priority=0 -> Q1(FCFS), 1 -> Q2(SJF), else -> Q3(RR).)
+    """
+    while completed_processes < n:    
+        arrivals_this_step = []
+        for proc in not_arrived:
+            if proc.arrival_time <= time:
+                arrivals_this_step.append(proc)
+
+        for proc in arrivals_this_step:
+            not_arrived.remove(proc)
+            #assignment by priority
+            if proc.priority == 0:
+                fcfs_queue.add_process(proc)
+            elif proc.priority == 1:
+                sjf_queue.add_process(proc)
+            else:
+                rr_queue.add_process(proc)
+
+        #next queue based on weights
+        next_queue_index = wfs.get_next_queue_index()
+        selected_queue = queues[next_queue_index]
+
+        # Get next process from that queue
+        current_process = selected_queue.get_next_process()
+
+        if current_process:
+            # If the process is starting for the first time, record start_time / response_time
+            if current_process.start_time is None:
+                current_process.start_time = time
+                current_process.response_time = time - current_process.arrival_time
+
+            # Run the process for one time slice (the length of the time slice depends on the queue)
+            if selected_queue == rr_queue:
+                # Round Robin: run for min(time_quantum, remaining_time)
+                slice_time = min(time_quantum, current_process.remaining_time)
+            else:
+                # FCFS or SJF (non-preemptive in this example) => run to completion
+                slice_time = current_process.remaining_time
+
+            # "Execute" process
+            time += slice_time
+            cpu_busy_time += slice_time
+            current_process.remaining_time -= slice_time
+
+            # check if process done
+            if current_process.remaining_time <= 0:
+                current_process.completion_time = time
+                current_process.turnaround_time = current_process.completion_time - current_process.arrival_time
+                # remove from the respective queue
+                selected_queue.remove_process(current_process)
+                completed_processes += 1
+            else:
+                # if it’s RR, we rotate the queue to give the next process a chance
+                if selected_queue == rr_queue:
+                    selected_queue.rotate_queue()
+        else:
+            # No process was ready in the selected queue.
+            # For simplicity I advanced time by 1 to see if new arrivals come in
+            time += 1
+
+    # Printing Operations
+    total_time = time
+    cpu_utilization = (cpu_busy_time / total_time) * 100
+
+    total_response_time = sum(p.response_time for p in process_list)
+    total_turnaround_time = sum(p.turnaround_time for p in process_list)
+
+    avg_response_time = total_response_time / n
+    avg_turnaround_time = total_turnaround_time / n
+    throughput = n / total_time
+
+    print("===== Simulation Results =====")
+    for p in process_list:
+        print(f"Process {p.pid}:")
+        print(f"  Arrival Time   = {p.arrival_time}")
+        print(f"  Burst Time     = {p.burst_time}")
+        print(f"  Priority       = {p.priority}")
+        print(f"  Start Time     = {p.start_time}")
+        print(f"  Completion Time= {p.completion_time}")
+        print(f"  Response Time  = {p.response_time}")
+        print(f"  Turnaround Time= {p.turnaround_time}")
+        print("")
+
+    print("===== Overall Metrics =====")
+    print(f"Total Simulation Time : {total_time}")
+    print(f"CPU Busy Time         : {cpu_busy_time}")
+    print(f"CPU Utilization       : {cpu_utilization:.2f}%")
+    print(f"Throughput            : {throughput:.2f} processes/time-unit")
+    print(f"Average Response Time : {avg_response_time:.2f}")
+    print(f"Average Turnaround Time: {avg_turnaround_time:.2f}")
+
+
+if __name__ == "__main__":
+    # EXAMPLE USAGE:
+
+    # Create some processes with different arrival times, burst times, and priorities
+    # Priority decides which queue the process goes into:
+    #   priority=0 => Q1(FCFS)
+    #   priority=1 => Q2(SJF)
+    #   priority=2 => Q3(RR)
+    processes = [
+        Process(pid=1, arrival_time=0,  burst_time=5, priority=0),
+        Process(pid=2, arrival_time=2,  burst_time=3, priority=1),
+        Process(pid=3, arrival_time=4,  burst_time=2, priority=2),
+        Process(pid=4, arrival_time=6,  burst_time=6, priority=2),
+        Process(pid=5, arrival_time=6,  burst_time=4, priority=1),
+    ]
+
+    # Weights for WeightedFairScheduler => [2,1,1] means:
+    #   Q1(FCFS) gets 2 slices per cycle
+    #   Q2(SJF)  gets 1 slice per cycle
+    #   Q3(RR)   gets 1 slice per cycle
+    weights = [2, 1, 1]
+
+    # Time quantum for Round Robin queue
+    time_quantum = 2
+
+    # Run simulation
+    simulate(processes, weights, time_quantum)

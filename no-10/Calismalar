@@ -1,0 +1,30 @@
+#Insertion Sort
+mylist= [8,2,4,9,3,6]
+dummy = 0
+for i in range(len(mylist)-1):
+    for j in range(i+1,len(mylist)):
+        if mylist[i] > mylist[j]:
+            dummy=mylist[i]
+            mylist[i] = mylist[j]
+            mylist[j]=dummy
+            print(mylist)
+'''
+#proof by induction
+
+claim s(n) is true for all n>=k
+n' i dene 
+(n+1)' i dene
+'''
+#Merge Sort
+'''
+Divide and conquer
+Divide the problem into subproblems.
+Conquer by sorting the subsequences recursively by calling merge sort againg. If the subs are small enough == 1, solve directly.
+Combine the two sorted subsequences by merging them to get a sorted array.
+
+T(n)= -> O(1)             , if n=1 
+      -> 2T(n/2)+O(1)+O(n), if n>1
+
+'''
+l1=[1,12,33,123,15,345,45672,34,2346,458,2345,134,58]
+def mergesort (a,s,d,f):
